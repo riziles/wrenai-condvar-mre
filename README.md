@@ -12,13 +12,16 @@ tasks per partition and uses `std::sync::Condvar` for coordination. On
 ## Reproduction
 
 ```bash
-node serve.mjs         # Start local file server on :3333
-# Open index.html in a browser (or use a dev server)
+npm install
+npx serve .
+# Open http://localhost:3333
 ```
 
-The Parquet file (39 MB, ~4M rows, multiple row groups) is served locally at
-`http://localhost:3333/data.parquet`. When `WrenEngine` queries it, the multi-row-group
-structure triggers a multi-partition scan and the Condvar panic.
+Or just visit the GitHub Pages deployment:
+https://riziles.github.io/wrenai-condvar-mre/
+
+The Parquet file (200K rows, 4 row groups, ~2.6 MB) triggers a multi-partition scan.
+The WASM binary is fetched from npm at deploy time (not committed).
 
 ## Expected fix
 
