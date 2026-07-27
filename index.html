@@ -12,64 +12,65 @@
     .status.loading{background:rgba(255,255,255,0.05);color:var(--muted)}
     .status.ok{background:rgba(76,175,80,0.1);border:1px solid var(--ok)}
     .status.err{background:rgba(233,69,96,0.1);border:1px solid var(--err)}
-    pre{background:rgba(0,0,0,0.3);padding:1rem;border-radius:8px;overflow-x:auto;font-size:0.85rem;line-height:1.5}
+    pre{background:rgba(0,0,0,0.3);padding:1rem;border-radius:8px;overflow-x:auto;font-size:0.85rem;line-height:1.5;white-space:pre-wrap}
     .note{color:var(--muted);font-size:0.85rem;margin-top:2rem}
   </style>
-</head>
-<body>
-  <h1>WrenAI wren-core-wasm condvar panic MRE</h1>
-  <div id="status" class="status loading">Loading @wrenai/wren-core-wasm...</div>
-
   <script type="module">
-    import { WrenEngine } from "https://esm.sh/@wrenai/wren-core-wasm@0.4.1";
+    import { WrenEngine } from "./wren-core-wasm.js";
 
     const status = document.getElementById("status");
-    const PARQUET = new URL("data.parquet", import.meta.url).href;
 
     function ok(msg)   { status.className = "status ok"; status.textContent = msg; }
     function fail(msg) { status.className = "status err"; status.innerHTML = msg; }
+    function log(msg)  { status.className = "status loading"; status.textContent = msg; }
 
-    try {
-      status.textContent = "Initializing WrenEngine...";
+    async function main() {
+      log("Initializing WrenEngine...");
       const engine = await WrenEngine.init();
 
-      status.textContent = "Loading MDL with URL-mode ListingTable...";
+      log("Loading MDL with URL-mode ListingTable...");
       const mdl = {
-        catalog: "wren",
-        schema: "public",
+        catalog: "wren", schema: "public",
         models: [{
-          name: "loans",
-          tableReference: { table: "loans" },
+          name: "loans", tableReference: { table: "loans" },
           columns: [
-            { name: "id",     type: "INTEGER" },
-            { name: "state",  type: "VARCHAR" },
+            { name: "id", type: "INTEGER" },
+            { name: "state", type: "VARCHAR" },
             { name: "amount", type: "DOUBLE" },
-            { name: "rate",   type: "DOUBLE" },
-            { name: "score",  type: "INTEGER" },
+            { name: "rate", type: "DOUBLE" },
+            { name: "score", type: "INTEGER" },
           ],
           primaryKey: "id",
         }],
-        relationships: [],
-        views: [],
+        relationships: [], views: [],
       };
 
-      await engine.loadMDL(mdl, { source: window.location.href });
-      status.textContent = "MDL loaded. Running COUNT(*) query...";
+      const base = window.location.href.replace(/\/[^/]*$/, "/");
+      await engine.loadMDL(mdl, { source: base });
+      log("MDL loaded. Running COUNT(*) — this will panic...");
 
-      // This panics: FileScanExec → Condvar::wait on wasm32-unknown-unknown
       const result = await engine.query('SELECT count(*) FROM "loans"');
-      ok(`✅ SUCCESS — Row count: ${JSON.stringify(result)}`);
-    } catch (e) {
-      fail(`💥 PANIC: ${e.message || e}<br><br>Expected: "condvar wait not supported"`);
+      ok(`UNEXPECTED SUCCESS — Row count: ${JSON.stringify(result)}`);
     }
-  </script>
 
+    main().catch(e => {
+      const msg = (e.message || String(e)).replace(/</g, "&lt;");
+      const expected = msg.includes("condvar") || msg.includes("not supported");
+      fail(
+        (expected ? "✅ Reproduced: " : "❓ Unexpected error: ") + msg +
+        "<br><br><small>Expected: <em>condvar wait not supported</em></small>"
+      );
+    });
+  </script>
+</head>
+<body>
+  <h1>WrenAI wren-core-wasm condvar panic MRE</h1>
+  <div id="status" class="status loading">Loading...</div>
   <div class="note">
     <strong>Reproduction:</strong><br>
-    <code>npx serve .</code> or <code>node serve.mjs</code> then open in a browser.<br>
-    The Parquet (200K rows, 4 row groups) triggers a multi-partition scan in<br>
-    DataFusion. On <code>wasm32-unknown-unknown</code> (no atomics),<br>
-    <code>FileScanExec</code> calls <code>Condvar::wait</code> which panics.
+    <code>npx serve .</code> then open in a browser. The Parquet (200K rows, 4 row groups)
+    triggers a multi-partition scan in DataFusion. On <code>wasm32-unknown-unknown</code>
+    (no atomics), <code>FileScanExec</code> calls <code>Condvar::wait</code> which panics.
   </div>
 </body>
 </html>

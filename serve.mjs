@@ -2,7 +2,14 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 
 const PORT = 3333;
-const PARQUET = new URL("./data.parquet", import.meta.url).pathname;
+const DIR = new URL(".", import.meta.url).pathname;
+
+const MIME = {
+  ".html": "text/html",
+  ".js": "application/javascript",
+  ".wasm": "application/wasm",
+  ".parquet": "application/octet-stream",
+};
 
 createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -12,23 +19,14 @@ createServer(async (req, res) => {
     return res.end();
   }
 
-  // Serve the Parquet file
-  if (req.url === "/data.parquet" || req.url === "/") {
-    const data = await readFile(PARQUET);
-    res.writeHead(200, { "Content-Type": "application/octet-stream" });
-    return res.end(data);
-  }
-
-  // Serve index.html
+  let path = req.url === "/" ? "/index.html" : req.url;
   try {
-    const html = await readFile(new URL("./index.html", import.meta.url));
-    res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(html);
+    const data = await readFile(DIR + path.slice(1));
+    const ext = "." + (path.split(".").pop() || "");
+    res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+    res.end(data);
   } catch {
     res.writeHead(404);
     res.end("404");
   }
-}).listen(PORT, () => {
-  console.log(`Serving on http://localhost:${PORT}`);
-  console.log(`Parquet: ${PARQUET}`);
-});
+}).listen(PORT, () => console.log(`http://localhost:${PORT}`));
