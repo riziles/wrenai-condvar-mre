@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WrenAI condvar MRE</title>
+  <style>
+    :root{--bg:#1a1a2e;--text:#eaeaea;--err:#e94560;--ok:#4caf50;--muted:#888}
+    body{font-family:system-ui;background:var(--bg);color:var(--text);padding:2rem;max-width:720px;margin:0 auto}
+    h1{font-size:1.3rem}
+    .status{padding:1rem;border-radius:8px;margin:1rem 0;font-family:monospace;font-size:0.9rem}
+    .status.loading{background:rgba(255,255,255,0.05);color:var(--muted)}
+    .status.ok{background:rgba(76,175,80,0.1);border:1px solid var(--ok)}
+    .status.err{background:rgba(233,69,96,0.1);border:1px solid var(--err)}
+    pre{background:rgba(0,0,0,0.3);padding:1rem;border-radius:8px;overflow-x:auto;font-size:0.85rem;line-height:1.5}
+    .note{color:var(--muted);font-size:0.85rem;margin-top:2rem}
+  </style>
+</head>
+<body>
+  <h1>WrenAI wren-core-wasm condvar panic MRE</h1>
+  <div id="status" class="status loading">Loading @wrenai/wren-core-wasm...</div>
+
+  <script type="module">
+    import { WrenEngine } from "https://esm.sh/@wrenai/wren-core-wasm@0.4.1";
+
+    const status = document.getElementById("status");
+    const PARQUET = new URL("data.parquet", import.meta.url).href;
+
+    function ok(msg)   { status.className = "status ok"; status.textContent = msg; }
+    function fail(msg) { status.className = "status err"; status.innerHTML = msg; }
+
+    try {
+      status.textContent = "Initializing WrenEngine...";
+      const engine = await WrenEngine.init();
+
+      status.textContent = "Loading MDL with URL-mode ListingTable...";
+      const mdl = {
+        catalog: "wren",
+        schema: "public",
+        models: [{
+          name: "loans",
+          tableReference: { table: "loans" },
+          columns: [
+            { name: "id",     type: "INTEGER" },
+            { name: "state",  type: "VARCHAR" },
+            { name: "amount", type: "DOUBLE" },
+            { name: "rate",   type: "DOUBLE" },
+            { name: "score",  type: "INTEGER" },
+          ],
+          primaryKey: "id",
+        }],
+        relationships: [],
+        views: [],
+      };
+
+      await engine.loadMDL(mdl, { source: window.location.href });
+      status.textContent = "MDL loaded. Running COUNT(*) query...";
+
+      // This panics: FileScanExec → Condvar::wait on wasm32-unknown-unknown
+      const result = await engine.query('SELECT count(*) FROM "loans"');
+      ok(`✅ SUCCESS — Row count: ${JSON.stringify(result)}`);
+    } catch (e) {
+      fail(`💥 PANIC: ${e.message || e}<br><br>Expected: "condvar wait not supported"`);
+    }
+  </script>
+
+  <div class="note">
+    <strong>Reproduction:</strong><br>
+    <code>npx serve .</code> or <code>node serve.mjs</code> then open in a browser.<br>
+    The Parquet (200K rows, 4 row groups) triggers a multi-partition scan in<br>
+    DataFusion. On <code>wasm32-unknown-unknown</code> (no atomics),<br>
+    <code>FileScanExec</code> calls <code>Condvar::wait</code> which panics.
+  </div>
+</body>
+</html>
