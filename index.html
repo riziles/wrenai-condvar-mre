@@ -2,68 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WrenAI condvar MRE</title>
   <style>
-    :root{--bg:#1a1a2e;--text:#eaeaea;--err:#e94560;--ok:#4caf50;--muted:#888}
-    body{font-family:system-ui;background:var(--bg);color:var(--text);padding:2rem;max-width:720px;margin:0 auto}
+    body{font-family:system-ui;background:#1a1a2e;color:#eaeaea;padding:2rem;max-width:720px;margin:0 auto}
     h1{font-size:1.3rem}
-    .status{padding:1rem;border-radius:8px;margin:1rem 0;font-family:monospace;font-size:0.9rem}
-    .status.loading{background:rgba(255,255,255,0.05);color:var(--muted)}
-    .status.ok{background:rgba(76,175,80,0.1);border:1px solid var(--ok)}
-    .status.err{background:rgba(233,69,96,0.1);border:1px solid var(--err)}
-    .note{color:var(--muted);font-size:0.85rem;margin-top:2rem}
-    .note a{color:var(--primary)}
+    .status{padding:1rem;border-radius:8px;margin:1rem 0;font-family:monospace;font-size:0.9rem;word-break:break-all}
+    .loading{background:rgba(255,255,255,0.05);color:#888}
+    .ok{background:rgba(76,175,80,0.1);border:1px solid #4caf50}
+    .err{background:rgba(233,69,96,0.1);border:1px solid #e94560}
+    .note{color:#888;font-size:0.85rem;margin-top:2rem}
+    .note a{color:#e94560}
   </style>
   <script type="module">
     import { WrenEngine } from "./wren-core-wasm.js";
-
-    const status = document.getElementById("status");
-
-    function ok(msg)   { status.className = "status ok"; status.textContent = msg; }
-    function fail(msg, expected) {
-      status.className = expected ? "status ok" : "status err";
-      status.innerHTML = msg;
-    }
-    function log(msg)  { status.className = "status loading"; status.textContent = msg; }
+    const s = document.getElementById("status");
+    function log(m) { s.className="status loading"; s.textContent=m; }
 
     async function main() {
-      log("Initializing WrenEngine...");
+      log("Init...");
       const engine = await WrenEngine.init();
 
-      log("Loading MDL (URL-mode ListingTable)...");
-      const mdl = {
-        catalog: "wren", schema: "public",
-        models: [{
-          name: "loans", tableReference: { table: "loans" },
-          columns: [
-            { name: "id", type: "INTEGER" },
-            { name: "state", type: "VARCHAR" },
-            { name: "amount", type: "DOUBLE" },
-            { name: "rate", type: "DOUBLE" },
-            { name: "score", type: "INTEGER" },
-          ],
-          primaryKey: "id",
-        }],
-        relationships: [], views: [],
-      };
-
       const base = window.location.href.replace(/\/[^/]*$/, "/");
-      await engine.loadMDL(mdl, { source: base });
-      log("MDL loaded. Running COUNT(*) — this triggers the panic...");
+      log("Source dir: " + base + " (expecting " + base + "loans.parquet)");
+      await engine.loadMDL({
+        catalog:"wren", schema:"public",
+        models:[{
+          name:"loans", tableReference:{table:"loans"},
+          columns:[
+            {name:"id",type:"INTEGER"},{name:"state",type:"VARCHAR"},
+            {name:"amount",type:"DOUBLE"},{name:"rate",type:"DOUBLE"},
+            {name:"score",type:"INTEGER"}],
+          primaryKey:"id"
+        }],
+        relationships:[], views:[]
+      }, { source: base });
 
-      const result = await engine.query('SELECT count(*) FROM "loans"');
-      ok(`UNEXPECTED: query succeeded (${JSON.stringify(result)}) — bug may be fixed`);
+      log("Running COUNT(*) — triggers condvar panic...");
+      await engine.query('SELECT count(*) FROM "loans"');
+      s.className="status ok"; s.textContent="UNEXPECTED: query succeeded";
     }
 
     main().catch(e => {
-      const msg = (e.message || String(e)).replace(/</g, "&lt;");
-      const isCondvar = msg.includes("condvar") || msg.includes("not supported");
-      fail(
-        (isCondvar ? "✅ Reproduced: " : "❓ Unexpected: ") + msg +
-        "<br><br><small>Expected: <em>condvar wait not supported</em></small>",
-        isCondvar
-      );
+      const m = (e.message||"").replace(/</g,"&lt;");
+      const hit = m.includes("condvar")||m.includes("not supported");
+      s.className="status "+(hit?"ok":"err");
+      s.innerHTML = (hit?"✅ Reproduced: ":"❓ Unexpected: ")+m+
+        "<br><br><small>Expected: <em>condvar wait not supported</em></small>";
     });
   </script>
 </head>
@@ -71,10 +55,6 @@
   <h1>WrenAI wren-core-wasm condvar panic MRE</h1>
   <div id="status" class="status loading">Loading...</div>
   <div class="note">
-    <strong>Reproduction:</strong><br>
-    <code>npm install &amp;&amp; npx serve .</code> then open in a browser.<br>
-    The Parquet (200K rows, 4 row groups) triggers multi-partition scan.<br>
-    <code>FileScanExec</code> → <code>Condvar::wait</code> panics on WASM.<br><br>
     <a href="https://github.com/riziles/wrenai-condvar-mre">github.com/riziles/wrenai-condvar-mre</a>
   </div>
 </body>
