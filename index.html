@@ -32,24 +32,22 @@
       const mdl = {
         catalog: "wren", schema: "public",
         models: [{
-          name: "loans", tableReference: { table: "loans" },
+          name: "t", tableReference: { table: "t" },
           columns: [
             { name: "id", type: "INTEGER" },
-            { name: "state", type: "VARCHAR" },
-            { name: "amount", type: "DOUBLE" },
-            { name: "rate", type: "DOUBLE" },
-            { name: "score", type: "INTEGER" },
+            { name: "val", type: "DOUBLE" },
           ],
           primaryKey: "id",
         }],
         relationships: [], views: [],
       };
 
-      const base = window.location.href.replace(/\/[^/]*$/, "/");
-      await engine.loadMDL(mdl, { source: base });
+      // 4M-row Fannie Mae Parquet — guaranteed multi-row-group
+      const source = "https://pub-a0dfcedd4df848e5bfca15cca210aea5.r2.dev/2024/Q1/";
+      await engine.loadMDL(mdl, { source });
       log("MDL loaded. Running COUNT(*) — this will panic...");
 
-      const result = await engine.query('SELECT count(*) FROM "loans"');
+      const result = await engine.query('SELECT count(*) FROM "t"');
       ok(`UNEXPECTED SUCCESS — Row count: ${JSON.stringify(result)}`);
     }
 
@@ -68,9 +66,10 @@
   <div id="status" class="status loading">Loading...</div>
   <div class="note">
     <strong>Reproduction:</strong><br>
-    <code>npx serve .</code> then open in a browser. The Parquet (200K rows, 4 row groups)
-    triggers a multi-partition scan in DataFusion. On <code>wasm32-unknown-unknown</code>
-    (no atomics), <code>FileScanExec</code> calls <code>Condvar::wait</code> which panics.
+    Uses a 4M-row, multi-row-group Fannie Mae Parquet on R2.
+    <code>FileScanExec</code> creates parallel scan tasks → <code>Condvar::wait</code>
+    panics on <code>wasm32-unknown-unknown</code>.<br><br>
+    Source: <a href="https://github.com/riziles/wrenai-condvar-mre">github.com/riziles/wrenai-condvar-mre</a>
   </div>
 </body>
 </html>

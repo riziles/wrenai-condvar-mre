@@ -5,3 +5,4 @@ wren_core_wasm.js
 wren_core_wasm_bg.wasm
 package.json
 package-lock.json
+loans.parquet
