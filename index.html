@@ -32,7 +32,7 @@
       const mdl = {
         catalog: "wren", schema: "public",
         models: [{
-          name: "t", tableReference: { table: "t" },
+          name: "loans", tableReference: { table: "loans" },
           columns: [
             { name: "id", type: "INTEGER" },
             { name: "val", type: "DOUBLE" },
@@ -47,7 +47,7 @@
       await engine.loadMDL(mdl, { source });
       log("MDL loaded. Running COUNT(*) — this will panic...");
 
-      const result = await engine.query('SELECT count(*) FROM "t"');
+      const result = await engine.query('SELECT count(*) FROM "loans"');
       ok(`UNEXPECTED SUCCESS — Row count: ${JSON.stringify(result)}`);
     }
 
