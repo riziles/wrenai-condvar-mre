@@ -27,7 +27,8 @@ jobs:
           npm init -y
           npm install @wrenai/wren-core-wasm@0.4.1
           cp node_modules/@wrenai/wren-core-wasm/dist/index.js wren-core-wasm.js
-          cp node_modules/@wrenai/wren-core-wasm/dist/wren_core_wasm_bg.wasm wren_core_wasm_bg.wasm
+          cp node_modules/@wrenai/wren-core-wasm/dist/wren_core_wasm.js .
+          cp node_modules/@wrenai/wren-core-wasm/dist/wren_core_wasm_bg.wasm .
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
